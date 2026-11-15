@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Виртуальные окружения
+.venv/
+venv/
+env/
+
+# Сборка
+build/
+dist/
+*.pkg
+*.toc
+
+# Данные приложения и тестов
+*.log
+tools/_preview.m4a
+tools/_*_raw.png
+/preview_*.png
+%LOCALAPPDATA%/
+
+# ОС и редакторы
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
