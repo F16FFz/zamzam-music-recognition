@@ -71,5 +71,6 @@ jobs:
           gh release create "${{ github.ref_name }}" `
             "dist\Zamzam.exe" `
             "dist\SHA256SUMS.txt" `
+            --repo "${{ github.repository }}" `
             --title "Zamzam ${{ github.ref_name }}" `
             --generate-notes
