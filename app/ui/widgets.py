@@ -805,6 +805,7 @@ class TitleBar(QWidget):
     minimize_requested = Signal()
     close_requested = Signal()
     language_requested = Signal()
+    context_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -880,6 +881,9 @@ class TitleBar(QWidget):
         self._close_button.setToolTip(i18n.tr("Закрыть в трей"))
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.RightButton:
+            self.context_requested.emit()
+            return
         if event.button() == Qt.LeftButton:
             self._drag_offset = (
                 event.globalPosition().toPoint() - self.window().frameGeometry().topLeft()

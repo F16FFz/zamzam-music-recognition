@@ -1,27 +1,30 @@
 """Главное окно Zamzam."""
 from __future__ import annotations
 
+import logging
 import math
 import time
 
-from PySide6.QtCore import QEvent, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
+from PySide6.QtCore import QEvent, QPoint, QSize, Qt, QTimer
+from PySide6.QtGui import QActionGroup, QColor, QCursor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QMessageBox,
     QPushButton,
     QScrollArea,
     QStackedWidget,
+    QSystemTrayIcon,
     QVBoxLayout,
     QWidget,
 )
 
 from .. import i18n
-from ..audio import Recorder
+from ..audio import Recorder, capture_devices
 from ..config import APP_NAME, Settings
 from ..models import HistoryStore, Track
 from ..recognition import RecognitionService
@@ -38,6 +41,8 @@ from .widgets import (
     Toast,
     TrackCard,
 )
+
+log = logging.getLogger(__name__)
 
 
 _TICKER_TEXT = (
@@ -70,6 +75,10 @@ class MainWindow(QWidget):
         self.recognition = RecognitionService(self)
 
         self.tray: TrayIcon | None = None
+        self._device_mode: str | None = None
+        self._device_options: list[tuple[str, str]] = []
+        self._device_default = ""
+        self._device_ready = False
         self._quitting = False
         self._shutdown_done = False
         self._tray_hint_shown = self.settings.tray_hint_shown
@@ -96,6 +105,13 @@ class MainWindow(QWidget):
         self._poll_timer.setInterval(60)
         self._poll_timer.timeout.connect(self._tick_levels)
 
+        # Страховка: если окно спрятано, а значка в трее почему-то нет,
+        # возвращаем окно, чтобы приложение не осталось невидимым.
+        self._tray_watch = QTimer(self)
+        self._tray_watch.setInterval(5000)
+        self._tray_watch.timeout.connect(self._check_tray_health)
+        self._tray_watch.start()
+
         self._build_ui()
         self._connect_service()
         self._sync_mode_chips()
@@ -119,6 +135,7 @@ class MainWindow(QWidget):
         self.title_bar.minimize_requested.connect(self.hide_to_tray)
         self.title_bar.close_requested.connect(self.close)
         self.title_bar.language_requested.connect(self.toggle_language)
+        self.title_bar.context_requested.connect(self._show_window_menu)
         root_layout.addWidget(self.title_bar)
 
         body = QWidget()
@@ -234,7 +251,16 @@ class MainWindow(QWidget):
         mode_row.addStretch(1)
         layout.addLayout(mode_row)
 
-        layout.addSpacing(8)
+        layout.addSpacing(4)
+        self.device_button = QPushButton()
+        self.device_button.setObjectName("deviceChip")
+        self.device_button.setCursor(Qt.PointingHandCursor)
+        self.device_button.setFixedHeight(26)
+        self.device_button.clicked.connect(self._show_device_menu)
+        self.device_button.installEventFilter(self)
+        layout.addWidget(self.device_button)
+
+        layout.addSpacing(4)
         hint = QLabel("CTRL + ALT + S — БЫСТРЫЙ ЗАПУСК")
         hint.setObjectName("footerHint")
         hint.setAlignment(Qt.AlignCenter)
@@ -325,6 +351,11 @@ class MainWindow(QWidget):
         self.recognition.no_match.connect(self._on_no_match)
         self.recognition.failed.connect(self._on_failed)
 
+    def eventFilter(self, obj, event):
+        if obj is getattr(self, "device_button", None) and event.type() == QEvent.Resize:
+            self._refresh_device_label()
+        return super().eventFilter(obj, event)
+
     def paintEvent(self, event) -> None:  # noqa: N802
         """Мягкая тень вокруг скруглённого окна."""
         painter = QPainter(self)
@@ -369,6 +400,7 @@ class MainWindow(QWidget):
         )
         self.history_title.setText(i18n.tr("ИСТОРИЯ"))
         self.btn_clear_history.setToolTip(i18n.tr("Очистить историю"))
+        self._refresh_device_label()
         self.title_bar.retranslate()
         self.pulse.retranslate()
         self.card.retranslate()
@@ -409,7 +441,27 @@ class MainWindow(QWidget):
         tray.set_listening(self._listening)
         tray.retranslate()
 
+    def detach_tray(self) -> None:
+        self.tray = None
+
+    def _tray_ready(self) -> bool:
+        """Трей есть и действительно может показать значок."""
+        return (
+            self.tray is not None
+            and self.tray.isVisible()
+            and QSystemTrayIcon.isSystemTrayAvailable()
+        )
+
+    def _check_tray_health(self) -> None:
+        """Не даёт приложению остаться невидимым без значка в трее."""
+        if self._quitting or not self.isHidden():
+            return
+        if not self._tray_ready():
+            log.warning("Окно скрыто, а трея нет — возвращаю окно")
+            self.show_window()
+
     def show_window(self) -> None:
+        log.info("Показываю окно")
         self.showNormal()
         self.raise_()
         self.activateWindow()
@@ -419,10 +471,12 @@ class MainWindow(QWidget):
         self.set_page(1)
 
     def hide_to_tray(self) -> None:
-        if self.tray is None:
-            # Трей недоступен — обычное свёрнутое окно.
+        if not self._tray_ready():
+            # Трей недоступен — обычное свёрнутое окно, чтобы не потеряться.
+            log.warning("Трей недоступен — сворачиваю в панель задач")
             self.showMinimized()
             return
+        log.info("Прячу окно в трей")
         self.hide()
         if not self._tray_hint_shown:
             self._tray_hint_shown = True
@@ -431,13 +485,25 @@ class MainWindow(QWidget):
                 self.settings.save()
             except Exception:  # noqa: BLE001
                 pass
+            assert self.tray is not None
             self.tray.notify(
                 i18n.tr("Zamzam свёрнут в трей"),
                 i18n.tr(
-                    "Приложение продолжает работать в фоне. Нажмите "
-                    "Ctrl + Alt + S, чтобы начать прослушивание."
+                    "Приложение продолжает работать в фоне. Значок — в области "
+                    "уведомлений рядом с часами. Нажмите Ctrl + Alt + S, чтобы "
+                    "начать прослушивание."
                 ),
             )
+
+    def _show_window_menu(self) -> None:
+        """Правый клик по шапке: свернуть в трей или выйти."""
+        menu = QMenu(self)
+        hide_action = menu.addAction(i18n.tr("Свернуть в трей"))
+        hide_action.triggered.connect(self.hide_to_tray)
+        menu.addSeparator()
+        quit_action = menu.addAction(i18n.tr("Выход"))
+        quit_action.triggered.connect(self.quit_app)
+        menu.exec(QCursor.pos())
 
     def _notify(self, title: str, message: str) -> None:
         if self.tray is None or self.isVisible():
@@ -449,7 +515,7 @@ class MainWindow(QWidget):
         if (
             event.type() == QEvent.WindowStateChange
             and self.isMinimized()
-            and self.tray is not None
+            and self._tray_ready()
             and not self._quitting
         ):
             self.hide_to_tray()
@@ -458,6 +524,7 @@ class MainWindow(QWidget):
         if self._shutdown_done:
             return
         self._shutdown_done = True
+        log.info("Завершаю работу")
         self._stop_capture()
         if self.tray is not None:
             self.tray.hide()
@@ -467,6 +534,7 @@ class MainWindow(QWidget):
             pass
 
     def quit_app(self) -> None:
+        log.info("Выход по команде пользователя")
         self._quitting = True
         self.shutdown()
         QApplication.quit()
@@ -514,7 +582,9 @@ class MainWindow(QWidget):
         self._quiet_flag = False
         self._preliminary = None
 
-        recorder = Recorder(self.settings.input_mode)
+        recorder = Recorder(
+            self.settings.input_mode, self.settings.device_for(self.settings.input_mode)
+        )
         recorder.start()
         self._recorder = recorder
         self._listening = True
@@ -855,6 +925,8 @@ class MainWindow(QWidget):
         self.settings.input_mode = mode
         self.settings.save()
         self._sync_mode_chips()
+        self._device_ready = False
+        self._refresh_device_label()
         if self._listening:
             self._start_listening()
         self.toast.show_message(
@@ -865,14 +937,100 @@ class MainWindow(QWidget):
             )
         )
 
+    # ------------------------------------------------------------- устройства
+    def _refresh_devices(self, force: bool = False) -> None:
+        """Обновляет список устройств для текущего режима (с кэшем)."""
+        mode = self.settings.input_mode
+        if not force and self._device_ready and self._device_mode == mode:
+            return
+        options, default_id = capture_devices(mode)
+        self._device_options = options
+        self._device_default = default_id
+        self._device_mode = mode
+        self._device_ready = True
+
+    def _current_device_id(self) -> str:
+        return self.settings.device_for(self.settings.input_mode)
+
+    def _device_name(self, device_id: str) -> str:
+        for option_id, name in self._device_options:
+            if option_id == device_id:
+                return name
+        return ""
+
+    def _refresh_device_label(self) -> None:
+        if not hasattr(self, "device_button"):
+            return
+        self._refresh_devices()
+        device_id = self._current_device_id()
+        name = self._device_name(device_id) or self._device_name(self._device_default)
+        if not name:
+            name = i18n.tr("Устройство по умолчанию")
+        prefix = f"{i18n.tr('УСТРОЙСТВО')} · "
+        suffix = "  ▾"
+        width = max(120, (self.device_button.width() or 392) - 24)
+        metrics = self.device_button.fontMetrics()
+        available = width - metrics.horizontalAdvance(prefix) - metrics.horizontalAdvance(suffix)
+        name_text = metrics.elidedText(name, Qt.ElideRight, max(48, available))
+        self.device_button.setText(prefix + name_text + suffix)
+        self.device_button.setToolTip(f"{i18n.tr('УСТРОЙСТВО')}: {name}")
+
+    def _show_device_menu(self) -> None:
+        self._refresh_devices(force=True)
+        menu = QMenu(self)
+        default_action = menu.addAction(i18n.tr("Устройство по умолчанию"))
+        default_action.setCheckable(True)
+        default_action.setChecked(not self._current_device_id())
+        default_action.triggered.connect(lambda: self._select_device(""))
+
+        if self._device_options:
+            menu.addSeparator()
+            group = QActionGroup(menu)
+            group.setExclusive(True)
+            current = self._current_device_id()
+            for device_id, name in self._device_options:
+                action = menu.addAction(name)
+                action.setCheckable(True)
+                action.setChecked(device_id == current)
+                action.triggered.connect(
+                    lambda _=False, chosen=device_id: self._select_device(chosen)
+                )
+                group.addAction(action)
+        else:
+            menu.addSeparator()
+            empty = menu.addAction(i18n.tr("Устройства не найдены"))
+            empty.setEnabled(False)
+
+        position = self.device_button.mapToGlobal(
+            QPoint(0, -menu.sizeHint().height() - 6)
+        )
+        menu.exec(position)
+
+    def _select_device(self, device_id: str) -> None:
+        mode = self.settings.input_mode
+        if self.settings.device_for(mode) == device_id:
+            return
+        self.settings.set_device_for(mode, device_id)
+        self.settings.save()
+        log.info("Выбрано устройство %s (%s)", device_id or "default", mode)
+        self._device_ready = False
+        self._refresh_device_label()
+        if self._listening:
+            self._start_listening()
+        self.toast.show_message(i18n.tr("УСТРОЙСТВО ВЫБРАНО"))
+
     # ---------------------------------------------------------------- закрытие
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._refresh_device_label()
+
     def closeEvent(self, event) -> None:  # noqa: N802
-        if self.tray is not None and not self._quitting:
+        if self._tray_ready() and not self._quitting:
             # Крестик прячет окно в трей, приложение продолжает работать.
             event.ignore()
             self.hide_to_tray()
             return
+        self._quitting = True
         self.shutdown()
         super().closeEvent(event)
-        if self.tray is None:
-            QApplication.quit()
+        QApplication.quit()

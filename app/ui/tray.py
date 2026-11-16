@@ -1,12 +1,16 @@
 """Значок Zamzam в системном трее и его меню."""
 from __future__ import annotations
 
+import logging
+
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QAction, QActionGroup, QIcon
-from PySide6.QtWidgets import QMenu, QSystemTrayIcon
+from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from .. import i18n
 from ..config import APP_NAME, resource_path
+
+log = logging.getLogger(__name__)
 
 
 class TrayIcon(QSystemTrayIcon):
@@ -21,6 +25,12 @@ class TrayIcon(QSystemTrayIcon):
     def __init__(self, parent=None) -> None:
         icon_path = resource_path("assets", "icon.ico")
         icon = QIcon(str(icon_path)) if icon_path.exists() else QIcon()
+        if icon.isNull():
+            application = QApplication.instance()
+            if application is not None:
+                icon = application.windowIcon()
+        if icon.isNull():
+            log.warning("Не удалось загрузить иконку трея: %s", icon_path)
         super().__init__(icon, parent)
         self.setToolTip(APP_NAME)
         self._listening = False

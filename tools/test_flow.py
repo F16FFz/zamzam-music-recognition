@@ -60,8 +60,9 @@ class FakeRecorder:
     level = 0.5
     peak = 0.7
 
-    def __init__(self, mode: str = "system") -> None:
+    def __init__(self, mode: str = "system", device_id: str = "") -> None:
         self.mode = mode
+        self.device_id = device_id
         self._started = time.monotonic()
 
     def start(self) -> None:

@@ -1,5 +1,6 @@
 PySide6-Essentials==6.12.0
 soundcard==0.4.6
+miniaudio==1.73
 numpy==2.5.4
 shazamio==0.9.0
 pyinstaller==6.22.3

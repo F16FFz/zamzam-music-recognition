@@ -188,6 +188,21 @@ def stylesheet() -> str:
         color: {LIME};
     }}
 
+    #deviceChip {{
+        background: rgba(242, 243, 227, 8);
+        border: 1px solid rgba(242, 243, 227, 24);
+        border-radius: 7px;
+        padding: 2px 10px;
+        font-family: {MONO_STACK};
+        font-size: 9px;
+        color: {MUTED};
+    }}
+    #deviceChip:hover {{
+        background: rgba(200, 247, 81, 18);
+        border-color: rgba(200, 247, 81, 120);
+        color: {BONE};
+    }}
+
     #footerHint {{
         font-family: {MONO_STACK};
         font-size: 9px;

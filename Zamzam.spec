@@ -8,6 +8,7 @@ hiddenimports = [
     "aiohttp_retry",
     "shazamio_core",
     "soundcard",
+    "miniaudio",
 ]
 
 for package in ("shazamio", "shazamio_core", "soundcard"):

@@ -20,6 +20,10 @@ _EN: dict[str, str] = {
     "ИСТОЧНИК": "SOURCE",
     "СИСТЕМНЫЙ ЗВУК": "SYSTEM AUDIO",
     "МИКРОФОН": "MICROPHONE",
+    "УСТРОЙСТВО": "DEVICE",
+    "Устройство по умолчанию": "Default device",
+    "Устройства не найдены": "No devices found",
+    "УСТРОЙСТВО ВЫБРАНО": "DEVICE SELECTED",
     "CTRL + ALT + S — БЫСТРЫЙ ЗАПУСК": "CTRL + ALT + S — QUICK START",
     "СЛУШАЙ · ОПОЗНАВАЙ · 18 СЕК": "LISTEN · IDENTIFY · 18 SEC",
     "SHAZAM ENGINE  ·  ЗАХВАТ ЗВУКА КОМПЬЮТЕРА  ·  18 СЕКУНД  ·  "
@@ -108,10 +112,12 @@ _EN: dict[str, str] = {
     "Язык": "Language",
     "Выход": "Quit",
     "Zamzam свёрнут в трей": "Zamzam was minimized to the tray",
-    "Приложение продолжает работать в фоне. Нажмите Ctrl + Alt + S, "
-    "чтобы начать прослушивание.": (
-        "The app keeps running in the background. Press Ctrl + Alt + S "
-        "to start listening."
+    "Приложение продолжает работать в фоне. Значок — в области "
+    "уведомлений рядом с часами. Нажмите Ctrl + Alt + S, чтобы "
+    "начать прослушивание.": (
+        "The app keeps running in the background. The icon is in the "
+        "notification area near the clock. Press Ctrl + Alt + S to start "
+        "listening."
     ),
     "Трек распознан": "Track recognized",
     "Трек не распознан": "No match found",

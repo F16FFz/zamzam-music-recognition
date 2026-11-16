@@ -10,7 +10,7 @@ from pathlib import Path
 
 APP_NAME = "Zamzam"
 APP_TITLE = "Zamzam"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 APP_ID = "Zamzam.Desktop.1"
 
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / APP_NAME
@@ -52,11 +52,24 @@ class Settings:
     max_history: int = 100
     language: str = "ru"  # "ru" — русский, "en" — английский
     tray_hint_shown: bool = False
+    # Пустой id — устройство по умолчанию. Идентификаторы приходят из soundcard.
+    system_device: str = ""
+    mic_device: str = ""
+
+    def device_for(self, mode: str) -> str:
+        return self.mic_device if mode == "microphone" else self.system_device
+
+    def set_device_for(self, mode: str, device_id: str) -> None:
+        if mode == "microphone":
+            self.mic_device = device_id
+        else:
+            self.system_device = device_id
 
     @classmethod
     def load(cls) -> "Settings":
         try:
-            raw = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+            # utf-8-sig: файл мог быть сохранён Блокнотом с BOM.
+            raw = json.loads(SETTINGS_FILE.read_text(encoding="utf-8-sig"))
             data = {k: v for k, v in raw.items() if k in cls.__dataclass_fields__}
             settings = cls(**data)
         except Exception:

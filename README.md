@@ -35,6 +35,10 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 - **Системный звук (WASAPI loopback)** — слышит YouTube, Spotify, браузер, плееры и игры,
   а не только микрофон.
 - **Режим микрофона** — если музыка играет рядом: колонка, телефон, телевизор.
+- **Выбор устройства** — можно указать конкретные колонки для системного звука или
+  конкретный микрофон, если их несколько. Выбор сохраняется.
+- **Надёжный микрофон** — если драйвер не поддерживается основным аудиодвижком,
+  автоматически включается резервный захват, и микрофон всё равно работает.
 - **Распознавание через Shazam** — без API-ключей и регистрации.
 - Название, исполнитель, альбом, год, жанр и обложка.
 - Ссылки на **Spotify, YouTube, Apple Music и Яндекс Музыку**. Если прямого трека нет,
@@ -54,6 +58,15 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 прослушивание, перейти в историю, сменить язык и выйти. Если окно скрыто, результат
 распознавания приходит уведомлением. Горячая клавиша **Ctrl + Alt + S** работает
 и в фоне.
+
+Windows 11 прячет значки новых приложений в переполнение — нажми **^** рядом
+с часами, чтобы найти Zamzam, и перетащи значок на панель, если он нужен на виду.
+Если системный трей почему-то недоступен, приложение не прячется: кнопка
+«свернуть» работает как обычное сворачивание в панель задач. Выйти можно и без
+трея — правый клик по шапке окна → **Выход**.
+
+Если приложение уже запущено, повторный запуск `Zamzam.exe` просто показывает
+уже открытое окно — второй экземпляр не создаётся.
 
 | Прослушивание | История |
 |---|---|
@@ -115,11 +128,19 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 .\.venv\Scripts\python.exe tools\test_refine.py        # уточнение трека
 .\.venv\Scripts\python.exe tools\test_manual_stop.py   # ручная остановка
 .\.venv\Scripts\python.exe tools\test_morphy.py        # проблемный трек Morphy
+.\.venv\Scripts\python.exe tools\test_devices.py       # список и выбор устройств
 .\.venv\Scripts\python.exe tools\probe_windows.py      # какие длины фрагментов узнаются
 .\.venv\Scripts\python.exe tools\audit.py              # геометрия интерфейса
 ```
 
 Тесты используют временную папку и не трогают настоящую историю приложения.
+
+## Если что-то не работает
+
+Приложение ведёт локальный лог: `%LOCALAPPDATA%\Zamzam\zamzam.log` (и
+`zamzam.log.1`). Там видно, запустилось ли приложение, появился ли значок в трее,
+какое устройство выбрано и какие были ошибки. Лог никуда не отправляется сам —
+его можно приложить к issue на GitHub.
 
 ## Ограничения
 
@@ -160,8 +181,9 @@ executable — choose “More info → Run anyway”.
 
 The app can be minimized or closed to the system tray and keep listening in the
 background via **Ctrl + Alt + S**; the result appears as a tray notification.
-The interface is available in **Russian and English** and switches instantly
-without a restart.
+You can pick a specific playback device for system audio or a specific
+microphone. The interface is available in **Russian and English** and switches
+instantly without a restart.
 
 The app is free to use, but redistribution of builds is allowed **only** from the
 official GitHub Releases page. See [LICENSE.md](LICENSE.md).
